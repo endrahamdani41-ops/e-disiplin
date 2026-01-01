@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>E-Disiplin SMPN 110 Jakarta</title>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@5/dark.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+
+    <style>
+        :root { 
+            --bg: #0f1012; 
+            --card: #1c1e22; 
+            --text: #e0e0e0; 
+            --accent: #3d8bff; 
+            --warning: #ffcc00; 
+            --danger: #ff4d4d;
+        }
+        
+        body { 
+            background-color: var(--bg); 
+            color: var(--text); 
+            font-family: 'Segoe UI', Roboto, sans-serif; 
+            padding-bottom: 50px; 
+        }
+
+        .card { 
+            background-color: var(--card); 
+            border: 1px solid #333; 
+            border-radius: 20px; 
+            overflow: hidden;
+        }
+        
+        .form-control, .form-select { 
+            background-color: #000 !important; 
+            color: var(--warning) !important; 
+            border: 1px solid #444 !important;
+            box-shadow: none !important;
+        }
+
+        .form-control:focus { border-color: var(--accent) !important; }
+        
+        .camera-box { 
+            border: 2px dashed #555; 
+            border-radius: 15px; 
+            height: 160px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            background: #111; 
+            cursor: pointer; 
+            overflow: hidden; 
+            margin-top: 10px;
+            transition: 0.3s;
+        }
+
+        .camera-box:hover { border-color: var(--accent); }
+        #preview-img { width: 100%; height: 100%; object-fit: cover; display: none; }
+        
+        #sig-canvas { 
+            background: #fff; 
+            border-radius: 10px; 
+            width: 100%; 
+            height: 180px; 
+            cursor: crosshair; 
+            touch-action: none; 
+        }
+        
+        .log-item { 
+            background: #1c1e22; 
+            padding: 15px; 
+            border-radius: 15px; 
+            margin-top: 15px; 
+            border-left: 5px solid var(--accent);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .list-group-item {
+            background: #2a2d34;
+            color: white;
+            border: 1px solid #444;
+            cursor: pointer;
+        }
+
+        .list-group-item:hover { background: var(--accent); }
+        
+        /* CSS PDF Template (Hidden from UI) */
+        .sp-print { 
+            padding: 50px; 
+            color: #000; 
+            background: #fff; 
+            width: 800px; 
+            position: absolute; 
+            left: -9999px; 
+            font-family: 'Times New Roman', serif;
+        }
+        .kop-surat { 
+            display: flex; 
+            align-items: center; 
+            border-bottom: 4px double #000; 
+            padding-bottom: 10px; 
+            margin-bottom: 20px; 
+        }
+        .logo-sekolah { width: 80px; height: auto; margin-right: 20px; }
+        .kop-text { text-align: center; flex-grow: 1; }
+        .kop-text h2 { margin: 0; font-size: 16px; text-transform: uppercase; }
+        .kop-text h1 { margin: 0; font-size: 20px; text-transform: uppercase; font-weight: bold; }
+        .kop-text p { margin: 2px 0; font-size: 11px; font-style: italic; }
+
+        .sp-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .sp-table td { padding: 10px 0; font-size: 16px; vertical-align: top; }
+        .label-col { width: 200px; }
+    </style>
+</head>
+<body>
+
+<div class="container" style="max-width: 600px; padding-top: 30px;">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-white mb-0">E-DISIPLIN</h2>
+        <p class="text-info small">SMP NEGERI 110 JAKARTA</p>
+    </div>
+
+    <div class="card p-4 mb-4 shadow">
+        <div class="mb-4 position-relative">
+            <label class="small text-info fw-bold mb-1">NAMA SISWA</label>
+            <input type="text" id="nama" class="form-control form-control-lg" onkeyup="searchName(this.value)" placeholder="Ketik nama siswa..." autocomplete="off">
+            <div id="autocomplete-list" class="list-group shadow position-absolute w-100" style="z-index: 99;"></div>
+        </div>
+
+        <div class="mb-4">
+            <label class="small text-info fw-bold mb-1">TINGKAT PELANGGARAN</label>
+            <select id="level" class="form-select mb-3">
+                <option value="Ringan" selected>⚪ Ringan (Teguran)</option>
+                <option value="Sedang">🟡 Sedang (Peringatan)</option>
+                <option value="Berat">🔴 Berat (Surat Panggilan)</option>
+            </select>
+
+            <label class="small text-info fw-bold mb-1">FOTO BUKTI (OPSIONAL)</label>
+            <div class="camera-box" onclick="document.getElementById('direct-camera').click()">
+                <div id="cam-label" class="text-center text-muted">
+                    <span style="font-size: 2rem;">📸</span><br>
+                    <small>AMBIL FOTO KEJADIAN</small>
+                </div>
+                <img id="preview-img">
+            </div>
+            <input type="file" id="direct-camera" accept="image/*" capture="camera" style="display: none;" onchange="handleFile(this)">
+        </div>
+
+        <div class="mb-4">
+            <label class="small text-info fw-bold mb-1">DETAIL KEJADIAN</label>
+            <textarea id="ket" class="form-control" rows="3" placeholder="Jelaskan detail pelanggaran..."></textarea>
+        </div>
+
+        <div class="mb-4">
+            <label class="small text-info fw-bold d-flex justify-content-between">
+                TANDA TANGAN GURU 
+                <span class="text-danger" onclick="clearSig()" style="cursor:pointer">Hapus [x]</span>
+            </label>
+            <canvas id="sig-canvas"></canvas>
+        </div>
+
+        <button onclick="prosesSimpan()" class="btn btn-primary btn-lg w-100 fw-bold rounded-pill mb-3 shadow">SIMPAN LAPORAN</button>
+        
+        <div class="d-flex gap-2">
+            <button onclick="exportExcel()" class="btn btn-outline-light btn-sm w-50">📥 Export CSV</button>
+            <button onclick="resetDatabase()" class="btn btn-outline-danger btn-sm w-50">🗑️ Reset Data</button>
+        </div>
+    </div>
+
+    <h5 class="fw-bold mb-3 text-white">Riwayat Pelanggaran Terbaru</h5>
+    <div id="logList"></div>
+</div>
+
+<div id="sp-template" class="sp-print">
+    <div class="kop-surat">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/b/b9/Logo_DKI_Jakarta.svg" class="logo-sekolah">
+        <div class="kop-text">
+            <h2>PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA</h2>
+            <h2>DINAS PENDIDIKAN</h2>
+            <h1>SMP NEGERI 110 JAKARTA</h1>
+            <p>Jl. Kemajuan No.48, Petukangan Selatan, Pesanggrahan, Jakarta Selatan</p>
+            <p>Telp: (021) 7342288 - Email: smpn110jaksel@gmail.com</p>
+            <p>JAKARTA</p>
+  
+        </div>
+    </div>
+
+    <center>
+        <h3 style="text-decoration: underline; margin-bottom: 5px;">SURAT PANGGILAN ORANG TUA</h3>
+        <p id="sp-nomor" style="margin-top: 0;">Nomor: .../DISIPLIN/2026</p>
+    </center>
+
+    <div style="margin-top: 30px;">
+        <p>Kepada Yth. Bapak/Ibu Orang Tua/Wali dari:</p>
+        <table class="sp-table">
+            <tr><td class="label-col">Nama Siswa</td><td>: <b id="sp-nama"></b></td></tr>
+            <tr><td class="label-col">Jenis Pelanggaran</td><td>: <span id="sp-level"></span></td></tr>
+            <tr><td class="label-col">Pelanggaran Ke</td><td>: <span id="sp-count"></span></td></tr>
+            <tr><td class="label-col">Keterangan</td><td>: <i id="sp-ket"></i></td></tr>
+        </table>
+        <p style="margin-top: 30px; line-height: 1.6;">
+            Sehubungan dengan hal tersebut, kami mengharap kehadiran Bapak/Ibu ke sekolah untuk menindaklanjuti pembinaan siswa yang bersangkutan.
+        </p>
+
+        <div style="margin-top: 50px; display: flex; justify-content: flex-end;">
+            <div style="text-align: center; width: 200px;">
+                <p>Jakarta, <span id="sp-tgl-footer"></span><br>Guru Pelapor,</p>
+                <div style="height: 70px;"><img id="sp-sig" style="max-height: 70px;"></div>
+                <p><b>( ________________ )</b></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. Inisialisasi Database
+    const db = new Dexie("E-Disiplin-DB");
+    db.version(1).stores({ logs: "++id, nama, level, tgl" });
+
+    // 2. Data Master Siswa (Bisa ditambah)
+    const daftarSiswa = ["Andi Wijaya", "Budi Saputra", "Citra Lestari", "Dedi Kurniawan", "Eka Putri", "Fajar Ramadhan", "Guntur Pratama", "Hani Syarifah", "Irfan Hakim", "Joko Susilo"];
+    
+    let currentPhoto = "";
+    const canvas = document.getElementById('sig-canvas');
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
+
+    // Set canvas internal resolution
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+
+    // 3. Fungsi Signature Pad
+    function getPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+            x: (clientX - rect.left),
+            y: (clientY - rect.top)
+        };
+    }
+
+    const startDraw = (e) => { drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); };
+    const doDraw = (e) => { 
+        if(!drawing) return; 
+        const p = getPos(e); 
+        ctx.lineWidth = 2; 
+        ctx.lineCap = 'round'; 
+        ctx.strokeStyle = '#000';
+        ctx.lineTo(p.x, p.y); 
+        ctx.stroke(); 
+        e.preventDefault();
+    };
+    const stopDraw = () => drawing = false;
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', doDraw);
+    window.addEventListener('mouseup', stopDraw);
+    canvas.addEventListener('touchstart', startDraw, {passive:false});
+    canvas.addEventListener('touchmove', doDraw, {passive:false});
+    canvas.addEventListener('touchend', stopDraw);
+
+    function clearSig() { ctx.clearRect(0,0,canvas.width,canvas.height); }
+
+    // 4. Autocomplete
+    function searchName(val) {
+        let list = document.getElementById('autocomplete-list');
+        list.innerHTML = "";
+        if (!val) return;
+        let filtered = daftarSiswa.filter(s => s.toLowerCase().includes(val.toLowerCase())).slice(0, 5);
+        filtered.forEach(s => {
+            let div = document.createElement("div"); 
+            div.className = "list-group-item"; 
+            div.innerText = s;
+            div.onclick = () => { document.getElementById('nama').value = s; list.innerHTML = ""; };
+            list.appendChild(div);
+        });
+    }
+
+    // 5. Image Handler
+    function handleFile(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.src = e.target.result;
+                img.onload = () => {
+                    const tempCanvas = document.createElement('canvas');
+                    const maxW = 800;
+                    const scale = maxW / img.width;
+                    tempCanvas.width = maxW;
+                    tempCanvas.height = img.height * scale;
+                    tempCanvas.getContext('2d').drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height);
+                    currentPhoto = tempCanvas.toDataURL('image/jpeg', 0.7);
+                    document.getElementById('preview-img').src = currentPhoto;
+                    document.getElementById('preview-img').style.display = "block";
+                    document.getElementById('cam-label').style.display = "none";
+                };
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    // 6. Simpan Laporan
+    async function prosesSimpan() {
+        const nama = document.getElementById('nama').value.trim();
+        const ket = document.getElementById('ket').value.trim();
+        const level = document.getElementById('level').value;
+        
+        // Check if signature is empty
+        const blank = document.createElement('canvas');
+        blank.width = canvas.width; blank.height = canvas.height;
+        if (canvas.toDataURL() === blank.toDataURL()) {
+            return Swal.fire('Gagal', 'Tanda tangan guru wajib diisi!', 'error');
+        }
+
+        if (!nama || !ket) return Swal.fire('Gagal', 'Nama dan Detail wajib diisi!', 'error');
+
+        const histori = await db.logs.where('nama').equals(nama).toArray();
+        const kasusKe = histori.length + 1;
+        const signature = canvas.toDataURL();
+
+        const data = { 
+            nama, level, ket, kasusKe, 
+            foto: currentPhoto, 
+            ttd: signature, 
+            tgl: new Date().toLocaleDateString('id-ID', {day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'})
+        };
+        
+        await db.logs.add(data);
+
+        if (kasusKe >= 2 || level === 'Berat') {
+            Swal.fire({
+                title: 'Pelanggaran Berulang!',
+                text: `Siswa ${nama} sudah melanggar ${kasusKe} kali. Cetak Surat Panggilan sekarang?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Cetak PDF',
+                cancelButtonText: 'Hanya Simpan'
+            }).then(r => { if(r.isConfirmed) generatePDF(data); else resetForm(); });
+        } else {
+            Swal.fire('Berhasil', 'Data kedisiplinan telah dicatat.', 'success');
+            resetForm();
+        }
+    }
+
+    // 7. Cetak PDF
+    async function generatePDF(data) {
+        Swal.fire({title: 'Membuat PDF...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
+        
+        document.getElementById('sp-nama').innerText = data.nama;
+        document.getElementById('sp-level').innerText = data.level;
+        document.getElementById('sp-ket').innerText = data.ket;
+        document.getElementById('sp-count').innerText = data.kasusKe + " (Total)";
+        document.getElementById('sp-nomor').innerText = `Nomor: ${Math.floor(Math.random()*1000)}/DISP/110/${new Date().getFullYear()}`;
+        document.getElementById('sp-tgl-footer').innerText = data.tgl.split(',')[0];
+        document.getElementById('sp-sig').src = data.ttd;
+
+        const el = document.getElementById('sp-template');
+        try {
+            const canvasHTML = await html2canvas(el, { scale: 2 });
+            const doc = new jspdf.jsPDF('p', 'pt', 'a4');
+            const pdfWidth = doc.internal.pageSize.getWidth();
+            const pdfHeight = (canvasHTML.height * pdfWidth) / canvasHTML.width;
+            
+            doc.addImage(canvasHTML.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
+            doc.save(`SP_${data.nama}_${Date.now()}.pdf`);
+            Swal.close();
+            resetForm();
+        } catch (err) {
+            Swal.fire('Error', 'Gagal membuat PDF', 'error');
+        }
+    }
+
+    // 8. UI & Render
+    async function render() {
+        const logs = await db.logs.reverse().toArray();
+        document.getElementById('logList').innerHTML = logs.length ? logs.map(i => `
+            <div class="log-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <b class="text-white">${i.nama}</b> 
+                        <span class="badge ${i.level === 'Berat' ? 'bg-danger' : 'bg-warning text-dark'} ms-1">Ke-${i.kasusKe}</span>
+                    </div>
+                    <small style="font-size: 10px; color: #888;">${i.tgl}</small>
+                </div>
+                <div class="text-info small fw-bold mt-1">${i.level}</div>
+                <div class="mt-1 small" style="color:#bbb">${i.ket}</div>
+                ${i.foto ? `<img src="${i.foto}" class="mt-2 w-100 rounded" style="max-height:150px; object-fit:cover;">` : ''}
+            </div>
+        `).join('') : '<p class="text-center text-muted mt-4">Belum ada riwayat.</p>';
+    }
+
+    function resetForm() {
+        document.getElementById('nama').value = "";
+        document.getElementById('ket').value = "";
+        document.getElementById('preview-img').style.display = "none";
+        document.getElementById('cam-label').style.display = "block";
+        currentPhoto = "";
+        clearSig();
+        render();
+    }
+
+    async function exportExcel() {
+        const data = await db.logs.toArray();
+        if(!data.length) return Swal.fire('Kosong', 'Tidak ada data untuk diekspor', 'info');
+        
+        let csv = 'Tanggal,Nama,Tingkat,Keterangan,KasusKe\n';
+        data.forEach(i => csv += `${i.tgl},${i.nama},${i.level},"${i.ket.replace(/"/g, '""')}",${i.kasusKe}\n`);
+        
+        const blob = new Blob([csv], {type: 'text/csv'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `Laporan_E-Disiplin_${new Date().toLocaleDateString()}.csv`;
+        a.click();
+    }
+
+    async function resetDatabase() {
+        const r = await Swal.fire({
+            title: 'Hapus Semua Data?',
+            text: "Data yang dihapus tidak bisa dikembalikan!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33'
+        });
+        if (r.isConfirmed) { 
+            await db.logs.clear(); 
+            render(); 
+            Swal.fire('Dihapus!', 'Database telah dikosongkan.', 'success');
+        }
+    }
+
+    // Jalankan render saat pertama buka
+    render();
+</script>
+
+</body>
+</html>

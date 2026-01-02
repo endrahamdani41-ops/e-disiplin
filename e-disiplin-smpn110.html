@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>E-Disiplin 110 (Ultimate v5)</title>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@5/dark.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        /* CSS UTAMA */
+        :root { --bg: #0f1012; --card: #1c1e22; --text: #e0e0e0; --accent: #3d8bff; }
+        body { background-color: var(--bg); color: var(--text); font-family: sans-serif; padding-bottom: 100px; user-select: none; }
+        
+        .card { background-color: var(--card); border: 1px solid #333; border-radius: 16px; overflow: hidden; }
+        .form-control, .form-select { background-color: #0b0c0e !important; color: #fff !important; border: 1px solid #444 !important; }
+        .form-control:focus { border-color: var(--accent) !important; box-shadow: none !important; }
+        
+        .camera-box { border: 2px dashed #444; border-radius: 12px; height: 150px; display: flex; align-items: center; justify-content: center; background: #111; cursor: pointer; overflow: hidden; position: relative; }
+        #preview-img { width: 100%; height: 100%; object-fit: cover; display: none; }
+        #sig-canvas { background: #fff; border-radius: 8px; width: 100%; height: 150px; cursor: crosshair; touch-action: none; }
+
+        .log-item { background: #1c1e22; padding: 12px; border-radius: 10px; margin-top: 10px; border-left: 4px solid var(--accent); position: relative; transition: 0.2s; }
+        .log-item:active { background: #333; }
+        .list-group-item { background: #2a2d34; color: white; border: 1px solid #444; cursor: pointer; }
+
+        .btn-icon { border-radius: 12px; transition: 0.2s; }
+        .btn-icon:active { transform: scale(0.95); }
+
+        /* --- LIGHTBOX (FULL SCREEN PHOTO) --- */
+        #lightbox {
+            display: none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; 
+            background-color: rgba(0,0,0,0.95); text-align: center; backdrop-filter: blur(5px);
+        }
+        #lightbox-img {
+            max-width: 95%; max-height: 90vh; margin: auto; position: absolute; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); border: 2px solid #fff; box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+        .close-lb {
+            position: absolute; top: 20px; right: 30px; color: #fff; font-size: 40px; font-weight: bold; cursor: pointer; z-index: 10001; transition: 0.2s;
+        }
+        .close-lb:hover { color: var(--accent); }
+        .lb-hint { position: absolute; bottom: 20px; width: 100%; text-align: center; color: #888; font-size: 12px; }
+        
+        /* Template SP (Tersembunyi) */
+        .sp-print { padding: 40px; color: #000; background: #fff; width: 800px; position: absolute; left: -9999px; font-family: 'Times New Roman', serif; top: 0; }
+        .sp-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .sp-table td { padding: 8px 0; font-size: 16px; vertical-align: top; }
+        .kop-surat { border-bottom: 3px double #000; padding-bottom: 10px; margin-bottom: 20px; display: flex; align-items: center; }
+    </style>
+</head>
+<body>
+
+<div id="lightbox" onclick="closeLightbox()">
+    <span class="close-lb">&times;</span>
+    <img id="lightbox-img" src="">
+    <div class="lb-hint">Ketuk layar untuk menutup</div>
+</div>
+
+<div class="container" style="max-width: 600px; padding-top: 20px;">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div><h4 class="fw-bold m-0">E-DISIPLIN 110</h4><small class="text-secondary">Dashboard Guru</small></div>
+        <button onclick="location.reload()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+    </div>
+
+    <div class="card p-3 mb-3 shadow border-secondary">
+        <h6 class="fw-bold text-white mb-2">Statistik Bulanan</h6>
+        <div style="height: 180px;"><canvas id="grafikPelanggaran"></canvas></div>
+    </div>
+
+    <div class="card p-3 mb-3 shadow">
+        <div class="mb-3 position-relative">
+            <label class="small text-info fw-bold mb-1">CARI SISWA</label>
+            <input type="text" id="nama" class="form-control" onkeyup="searchName(this.value)" placeholder="Ketik nama..." autocomplete="off">
+            <div id="autocomplete-list" class="list-group position-absolute w-100 shadow" style="z-index: 100;"></div>
+        </div>
+
+        <div class="row g-2 mb-3">
+            <div class="col-4"><input type="text" id="kelas" class="form-control form-control-sm" placeholder="Kelas" readonly></div>
+            <div class="col-8"><input type="text" id="wali" class="form-control form-control-sm" placeholder="Wali Kelas" readonly></div>
+        </div>
+
+        <div class="mb-3">
+            <label class="small text-info fw-bold mb-1">PELANGGARAN</label>
+            <select id="level" class="form-select mb-2">
+                <option value="Ringan">⚪ Ringan</option>
+                <option value="Sedang">🟡 Sedang</option>
+                <option value="Berat">🔴 Berat (Cetak SP)</option>
+            </select>
+            <textarea id="ket" class="form-control" rows="2" placeholder="Detail kejadian (Wajib diisi)..."></textarea>
+        </div>
+
+        <div class="row g-2 mb-3">
+            <div class="col-6">
+                <div class="camera-box" onclick="handleCameraClick()">
+                    <div id="cam-label" class="text-center text-muted"><i class="bi bi-camera fs-1"></i><br><small>FOTO</small></div>
+                    <img id="preview-img">
+                </div>
+                <input type="file" id="direct-camera" accept="image/*" capture="environment" style="display: none;" onchange="handleFileCompressed(this)">
+            </div>
+            <div class="col-6">
+                <div style="position: relative;">
+                    <canvas id="sig-canvas"></canvas>
+                    <span class="badge bg-danger position-absolute top-0 end-0 m-1" onclick="clearSig()" style="cursor: pointer;">Hapus</span>
+                    <small class="text-muted d-block text-center mt-1">Paraf Guru</small>
+                </div>
+            </div>
+        </div>
+
+        <button id="btn-simpan" onclick="prosesSimpan()" class="btn btn-primary w-100 fw-bold py-2 mb-3">SIMPAN DATA</button>
+
+        <div class="accordion" id="accordionTools">
+            <div class="accordion-item bg-dark border-secondary">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed bg-dark text-white shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#toolsBody">
+                        <i class="bi bi-folder2-open me-2"></i> Laporan & Database
+                    </button>
+                </h2>
+                <div id="toolsBody" class="accordion-collapse collapse" data-bs-parent="#accordionTools">
+                    <div class="accordion-body p-3">
+                        <div class="row g-2 text-center">
+                            <div class="col-3">
+                                <button onclick="cetakLaporanPDF()" class="btn btn-outline-danger w-100 py-3 btn-icon" title="Download PDF"><i class="bi bi-file-pdf fs-3"></i></button>
+                                <small class="text-muted" style="font-size: 9px;">PDF</small>
+                            </div>
+                            <div class="col-3">
+                                <button onclick="exportExcel()" class="btn btn-outline-success w-100 py-3 btn-icon" title="Download Excel"><i class="bi bi-file-earmark-excel fs-3"></i></button>
+                                <small class="text-muted" style="font-size: 9px;">EXCEL</small>
+                            </div>
+                            <div class="col-3">
+                                <button class="btn btn-outline-light w-100 py-3 btn-icon" data-bs-toggle="modal" data-bs-target="#modalSiswa" title="Input Siswa"><i class="bi bi-person-plus fs-3"></i></button>
+                                <small class="text-muted" style="font-size: 9px;">SISWA</small>
+                            </div>
+                            <div class="col-3">
+                                <button onclick="resetDatabase()" class="btn btn-outline-danger w-100 py-3 btn-icon" title="Reset Data"><i class="bi bi-trash3 fs-3"></i></button>
+                                <small class="text-muted" style="font-size: 9px;">RESET</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="toggle-header d-flex justify-content-between align-items-center mt-4 mb-2 py-2" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#collapseHistory" aria-expanded="true">
+        <h6 class="text-muted small fw-bold m-0">RIWAYAT TERBARU (Klik untuk Detail)</h6>
+        <i class="bi bi-chevron-down text-muted"></i>
+    </div>
+    <div class="collapse show" id="collapseHistory">
+        <div id="logList" class="pb-5"></div>
+    </div>
+
+</div>
+
+<div class="modal fade" id="modalDetail" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary p-2">
+                <h6 class="modal-title">Detail Pelanggaran</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-3">
+                <h4 id="det-nama" class="fw-bold mb-0"></h4>
+                <p id="det-kelas" class="text-muted small mb-3"></p>
+                
+                <div class="badge bg-secondary mb-2" id="det-tgl"></div>
+                <div class="alert alert-dark border-secondary text-start mb-3">
+                    <small class="text-muted d-block">Pelanggaran:</small>
+                    <b id="det-level" class="text-warning"></b><br>
+                    <i id="det-ket"></i>
+                </div>
+
+                <div class="mb-3">
+                    <small class="text-muted d-block mb-1">Bukti Foto (Klik untuk Perbesar):</small>
+                    <img id="det-foto" src="" onclick="openLightbox(this.src)" class="img-fluid rounded border border-secondary" style="max-height: 250px; display: none; cursor: zoom-in;">
+                    <p id="det-no-foto" class="small text-secondary fst-italic">Tidak ada foto</p>
+                </div>
+
+                <div class="d-flex justify-content-between gap-2 mt-3">
+                    <button class="btn btn-outline-danger btn-sm w-100" id="btn-hapus-det"><i class="bi bi-trash"></i> Hapus</button>
+                    <button class="btn btn-primary btn-sm w-100" id="btn-cetak-sp"><i class="bi bi-printer"></i> Cetak SP</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalSiswa" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary p-2"><h6 class="modal-title">Tambah Siswa</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body p-3">
+                <div class="row g-2 mb-2">
+                    <div class="col-4"><input type="text" id="batch-kelas" class="form-control form-control-sm" placeholder="Kls (7A)"></div>
+                    <div class="col-8"><input type="text" id="batch-wali" class="form-control form-control-sm" placeholder="Nama Wali"></div>
+                </div>
+                <textarea id="input-bulk-siswa" class="form-control form-control-sm" rows="5" placeholder="Paste nama siswa..."></textarea>
+                <div class="d-flex justify-content-between mt-3">
+                    <span class="small text-muted" id="count-siswa">Loading...</span>
+                    <button class="btn btn-success btn-sm" onclick="tambahDataSiswaBatch()">Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="sp-template" class="sp-print">
+    <div class="kop-surat">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/b/b9/Logo_DKI_Jakarta.svg" style="width: 80px; margin-right: 20px;">
+        <div style="text-align: center; flex-grow: 1;">
+            <h2 style="margin:0; font-size:14pt;">PEMERINTAH PROVINSI DKI JAKARTA</h2>
+            <h2 style="margin:0; font-size:14pt;">DINAS PENDIDIKAN</h2>
+            <h1 style="margin:0; font-size:18pt; font-weight:bold;">SMP NEGERI 110 JAKARTA</h1>
+            <p style="margin:0; font-size:10pt; font-style:italic;">Jl. Kemajuan No.48, Jakarta Selatan.</p>
+        </div>
+    </div>
+    
+    <center><h1 style="font-size: 18pt; margin-bottom: 5px;">SURAT PANGGILAN</h1></center>
+    <center><h6 style="margin-bottom: 25px;">No. <span id="sp-nomor-urut">...</span>/SP/SMPN110/<span id="sp-tahun">...</span></h6></center>
+
+    <div style="margin-top: 20px;">
+        <p>Kepada Yth. Bapak/Ibu Orang Tua/Wali dari:</p>
+        <table class="sp-table">
+            <tr><td style="width: 180px;">Nama Siswa</td><td>: <b id="sp-nama"></b></td></tr>
+            <tr><td>Kelas</td><td>: <span id="sp-kelas"></span></td></tr>
+            <tr><td>Pelanggaran</td><td>: <span id="sp-level"></span></td></tr>
+            <tr><td>Keterangan</td><td>: <i id="sp-ket"></i></td></tr>
+        </table>
+        
+        <p style="margin-top: 20px; text-align: justify; line-height: 1.5;">
+            Sehubungan dengan pelanggaran tata tertib sekolah tersebut, kami mengharap kehadiran Bapak/Ibu Orang Tua/Wali Murid ke sekolah untuk menemui Guru BK / Kesiswaan guna koordinasi dan pembinaan siswa lebih lanjut.
+        </p>
+
+        <div style="margin-top: 20px; border: 1px dashed #999; padding: 10px; display: inline-block;">
+            <p style="margin:0 0 5px 0; font-size: 10pt; font-weight: bold;">Bukti Foto:</p>
+            <img id="sp-foto-bukti" style="max-height: 150px; max-width: 300px; display: none;">
+            <p id="sp-no-foto" style="display: none; color: red;">(Tidak ada foto)</p>
+        </div>
+
+        <div style="margin-top: 30px; text-align: right;">
+            <p>Jakarta, <span id="sp-tgl-footer"></span><br>Guru BK / Kesiswaan,</p>
+            <div style="height: 70px;"><img id="sp-sig" style="max-height: 70px;"></div>
+            <p><b>( ____________________ )</b></p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const db = new Dexie("EDisiplinUltimateDB");
+    db.version(1).stores({ logs: "++id, nama, kelas, level, timestamp", students: "++id, nama, kelas" });
+
+    let chartInstance = null;
+    let detailModal = null; 
+
+    async function initApp() { 
+        updateStudentCount(); 
+        initChart(); 
+        renderLogs();
+        detailModal = new bootstrap.Modal(document.getElementById('modalDetail'));
+    }
+    
+    // --- LIGHTBOX FUNCTIONS ---
+    function openLightbox(src) {
+        if(!src) return;
+        document.getElementById('lightbox-img').src = src;
+        document.getElementById('lightbox').style.display = 'block';
+    }
+    function closeLightbox() {
+        document.getElementById('lightbox').style.display = 'none';
+    }
+    function handleCameraClick() {
+        if(currentPhoto) {
+            Swal.fire({
+                title: 'Opsi Foto',
+                showDenyButton: true,
+                showCancelButton: true,
+                confirmButtonText: 'Lihat Full Screen',
+                denyButtonText: 'Ganti Foto',
+                cancelButtonText: 'Batal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    openLightbox(currentPhoto);
+                } else if (result.isDenied) {
+                    document.getElementById('direct-camera').click();
+                }
+            })
+        } else {
+            document.getElementById('direct-camera').click();
+        }
+    }
+    // --------------------------------
+
+    async function initChart() {
+        if(typeof Chart === 'undefined') return;
+        const ctx = document.getElementById('grafikPelanggaran').getContext('2d');
+        chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'], datasets: [{ label:'Kasus', data:[], backgroundColor: '#3d8bff', borderRadius: 4 }] },
+            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, grid:{color:'#333'}}, x:{grid:{display:false}}} }
+        }); updateChart();
+    }
+    async function updateChart() {
+        if(!chartInstance) return;
+        const logs = await db.logs.toArray(); 
+        const counts = Array(12).fill(0);
+        logs.forEach(l => { counts[new Date(l.timestamp).getMonth()]++; });
+        chartInstance.data.datasets[0].data = counts; chartInstance.update();
+    }
+
+    const canvas = document.getElementById('sig-canvas'); const ctx = canvas.getContext('2d');
+    let drawing = false; setTimeout(() => { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; }, 500);
+    const getPos = (e) => { const r = canvas.getBoundingClientRect(); return { x: (e.touches?e.touches[0].clientX:e.clientX)-r.left, y: (e.touches?e.touches[0].clientY:e.clientY)-r.top }; }
+    ['mousedown','touchstart'].forEach(evt => canvas.addEventListener(evt, (e)=>{ drawing=true; ctx.beginPath(); ctx.moveTo(getPos(e).x, getPos(e).y); }));
+    ['mousemove','touchmove'].forEach(evt => canvas.addEventListener(evt, (e)=>{ if(drawing){ e.preventDefault(); ctx.lineTo(getPos(e).x, getPos(e).y); ctx.stroke(); } }, {passive:false}));
+    ['mouseup','touchend'].forEach(evt => canvas.addEventListener(evt, ()=>{ drawing=false; }));
+    function clearSig() { ctx.clearRect(0,0,canvas.width,canvas.height); }
+
+    let currentPhoto = null;
+    function handleFileCompressed(input) {
+        if(input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const elem = document.createElement('canvas');
+                    const scaleFactor = 800 / img.width; elem.width = 800; elem.height = img.height * scaleFactor;
+                    const ctx = elem.getContext('2d'); ctx.drawImage(img, 0, 0, elem.width, elem.height);
+                    currentPhoto = elem.toDataURL('image/jpeg', 0.6); 
+                    document.getElementById('preview-img').src = currentPhoto; document.getElementById('preview-img').style.display = 'block'; document.getElementById('cam-label').style.display = 'none';
+                }; img.src = e.target.result;
+            }; reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    async function searchName(val) {
+        const list = document.getElementById('autocomplete-list'); list.innerHTML = "";
+        if(!val) return;
+        const result = await db.students.filter(s => s.nama.toLowerCase().includes(val.toLowerCase())).limit(5).toArray();
+        result.forEach(s => {
+            const div = document.createElement('div'); div.className = 'list-group-item';
+            div.innerHTML = `<b>${s.nama}</b> <small>(${s.kelas})</small>`;
+            div.onclick = () => { document.getElementById('nama').value = s.nama; document.getElementById('kelas').value = s.kelas; document.getElementById('wali').value = s.wali || "-"; list.innerHTML = ""; }; 
+            list.appendChild(div);
+        });
+    }
+
+    async function prosesSimpan() {
+        const btn = document.getElementById('btn-simpan');
+        const nama = document.getElementById('nama').value;
+        const level = document.getElementById('level').value;
+        const ket = document.getElementById('ket').value;
+
+        if(!nama) return Swal.fire('Error','Nama Wajib Diisi!','error');
+        if(!ket || ket.trim() === "") return Swal.fire('Error','Detail Kejadian Wajib Diisi!','error');
+
+        btn.innerText = "Menyimpan..."; btn.disabled = true;
+
+        try {
+            const now = new Date();
+            const data = {
+                nama, kelas: document.getElementById('kelas').value, wali: document.getElementById('wali').value,
+                level, ket, foto: currentPhoto, ttd: canvas.toDataURL(),
+                timestamp: now.getTime(),
+                tglStr: now.toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})
+            };
+            await db.logs.add(data);
+            renderLogs(); updateChart();
+
+            if(level === 'Berat') {
+                Swal.fire({title:'Pelanggaran Berat', text:'Cetak Surat Panggilan (SP)?', icon:'warning', showCancelButton:true, confirmButtonText:'Ya, Cetak SP'}).then(r=>{ 
+                    if(r.isConfirmed) generateSP(data); else resetForm();
+                });
+            } else {
+                Swal.fire({title:'Tersimpan', icon:'success', timer:1000, showConfirmButton:false}); resetForm();
+            }
+        } catch(e) { alert(e); } finally { btn.innerText = "SIMPAN DATA"; btn.disabled = false; }
+    }
+
+    function resetForm() {
+        document.getElementById('nama').value = ""; 
+        document.getElementById('kelas').value = ""; 
+        document.getElementById('wali').value = "";
+        document.getElementById('ket').value = "";
+        document.getElementById('preview-img').style.display = 'none'; 
+        document.getElementById('cam-label').style.display = 'block';
+        currentPhoto = null; clearSig();
+    }
+
+    async function renderLogs() {
+        const logs = await db.logs.orderBy('timestamp').reverse().limit(20).toArray();
+        document.getElementById('logList').innerHTML = logs.map(i => `
+            <div class="log-item" onclick="lihatDetail(${i.id})" style="cursor: pointer;">
+                <div class="d-flex justify-content-between pe-2">
+                    <b>${i.nama}</b>
+                    <span class="badge ${i.level==='Berat'?'bg-danger':'bg-warning text-dark'}">${i.level}</span>
+                </div>
+                <div class="small text-muted">${i.tglStr}</div>
+                <div class="small mt-1 text-light text-truncate">"${i.ket}"</div>
+                <div class="position-absolute top-50 end-0 translate-middle-y me-3 text-muted"><i class="bi bi-chevron-right"></i></div>
+            </div>
+        `).join('') || '<div class="text-center text-muted mt-3">Belum ada data</div>';
+    }
+
+    async function lihatDetail(id) {
+        const data = await db.logs.get(id);
+        if(!data) return;
+
+        document.getElementById('det-nama').innerText = data.nama;
+        document.getElementById('det-kelas').innerText = data.kelas + " - " + data.wali;
+        document.getElementById('det-tgl').innerText = data.tglStr;
+        document.getElementById('det-level').innerText = data.level;
+        document.getElementById('det-ket').innerText = data.ket;
+
+        const imgEl = document.getElementById('det-foto');
+        const noImg = document.getElementById('det-no-foto');
+        if(data.foto) { imgEl.src = data.foto; imgEl.style.display = 'block'; noImg.style.display = 'none'; }
+        else { imgEl.style.display = 'none'; noImg.style.display = 'block'; }
+
+        document.getElementById('btn-hapus-det').onclick = () => hapusDariModal(id);
+        document.getElementById('btn-cetak-sp').onclick = () => { detailModal.hide(); generateSP(data); };
+
+        detailModal.show();
+    }
+
+    async function hapusDariModal(id) {
+        if((await Swal.fire({title:'Hapus Data Ini?', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33'})).isConfirmed) {
+            await db.logs.delete(id);
+            detailModal.hide();
+            renderLogs(); updateChart();
+        }
+    }
+
+    async function cetakLaporanPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const logs = await db.logs.orderBy('timestamp').reverse().toArray();
+        if(logs.length === 0) return Swal.fire('Kosong', 'Belum ada data', 'info');
+        doc.text("LAPORAN KEDISIPLINAN SMPN 110", 14, 15);
+        doc.setFontSize(10); doc.text(`Dicetak: ${new Date().toLocaleDateString('id-ID')}`, 14, 22);
+        doc.autoTable({
+            head: [['Tanggal', 'Nama', 'Kelas', 'Level', 'Keterangan']],
+            body: logs.map(l => [l.tglStr.split(',')[0], l.nama, l.kelas, l.level, l.ket]),
+            startY: 28, theme: 'grid', styles: { fontSize: 8 }, headStyles: { fillColor: [44, 62, 80] }
+        });
+        doc.save(`Laporan_Disiplin_${Date.now()}.pdf`);
+    }
+
+    // --- FUNGSI GENERATE SP (UPDATED: NOMOR SURAT OTOMATIS) ---
+    async function generateSP(data) {
+        Swal.showLoading();
+
+        // 1. Ambil tahun dari timestamp data
+        const dateObj = new Date(data.timestamp);
+        const year = dateObj.getFullYear();
+        
+        // 2. Tentukan range waktu (Awal tahun s.d. Akhir tahun dari data tersebut)
+        const startOfYear = new Date(year, 0, 1).getTime();
+        const endOfYear = new Date(year + 1, 0, 1).getTime();
+
+        // 3. Hitung berapa banyak pelanggaran 'Berat' pada tahun tersebut s.d. saat ini
+        const count = await db.logs
+            .where('timestamp').between(startOfYear, endOfYear)
+            .filter(l => l.level === 'Berat' && l.timestamp <= data.timestamp)
+            .count();
+
+        // 4. Format nomor menjadi 3 digit (001, 002, dst)
+        const nomorUrut = count.toString().padStart(3, '0');
+
+        // Isi Data ke Template
+        ['nama','kelas','level','ket'].forEach(k => document.getElementById(`sp-${k}`).innerText = data[k]);
+        document.getElementById('sp-tgl-footer').innerText = data.tglStr.split(',')[0];
+        document.getElementById('sp-sig').src = data.ttd;
+        
+        // Isi Nomor Otomatis ke Template
+        document.getElementById('sp-nomor-urut').innerText = nomorUrut;
+        document.getElementById('sp-tahun').innerText = year;
+        
+        const spFoto = document.getElementById('sp-foto-bukti');
+        const spNoFoto = document.getElementById('sp-no-foto');
+        if(data.foto) { spFoto.src = data.foto; spFoto.style.display = 'block'; spNoFoto.style.display = 'none'; }
+        else { spFoto.style.display = 'none'; spNoFoto.style.display = 'block'; }
+
+        const el = document.getElementById('sp-template');
+        
+        // Tunggu render DOM sebentar
+        await new Promise(r => setTimeout(r, 100));
+
+        const canvas = await html2canvas(el, {scale: 2});
+        const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+        const imgProps = pdf.getImageProperties(canvas.toDataURL('image/png'));
+        const pdfHeight = (imgProps.height * pdf.internal.pageSize.getWidth()) / imgProps.width;
+        
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdfHeight);
+        pdf.save(`SP_${nomorUrut}_${data.nama}.pdf`); 
+        
+        Swal.close(); 
+        resetForm();
+    }
+
+    async function exportExcel() {
+        const logs = await db.logs.toArray();
+        let csv = "Tanggal,Nama,Kelas,Wali,Level,Keterangan\n";
+        logs.forEach(l => {
+            const cleanTgl = l.tglStr.replace(',',' '); 
+            csv += `"${cleanTgl}","${l.nama}","${l.kelas}","${l.wali}","${l.level}","${l.ket}"\n`;
+        });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); a.download = 'Laporan_Disiplin.csv'; a.click();
+    }
+
+    async function tambahDataSiswaBatch() {
+        const raw = document.getElementById('input-bulk-siswa').value;
+        const kelas = document.getElementById('batch-kelas').value;
+        const wali = document.getElementById('batch-wali').value;
+        if(!raw || !kelas) return Swal.fire('Gagal','Data belum lengkap','warning');
+        const data = raw.split('\n').filter(n=>n.trim().length>0).map(nama => ({nama: nama.trim(), kelas, wali}));
+        await db.students.bulkAdd(data); updateStudentCount(); Swal.fire('Sukses', `${data.length} siswa ditambahkan`,'success');
+        bootstrap.Modal.getInstance(document.getElementById('modalSiswa')).hide();
+    }
+    async function updateStudentCount() { document.getElementById('count-siswa').innerText = `Total: ${await db.students.count()} Siswa`; }
+    async function resetDatabase() { if((await Swal.fire({title:'Hapus Semua?', icon:'warning', showCancelButton:true})).isConfirmed){ await db.logs.clear(); await db.students.clear(); location.reload(); } }
+
+    initApp();
+</script>
+</body>
+</html>
+
